@@ -35,10 +35,10 @@ void handleBlastCommand(cmdLine *pCmdLine);
 void executePipeCommands(cmdLine *pCmdLine); 
 void executeSingleCommand(cmdLine *pCmdLine);
 void addProcess(process** process_list, cmdLine* cmd, pid_t pid);
-void printProcessList(process** process_list);
-void updateProcessList(process** process_list);
-void deleteTerminatedProcesses(process** process_list);
 void setProcessStatus(process *process_list, int pid, int status);
+void updateProcessList(process** process_list);
+void deleteProcess(process** process_list, process* proc);
+void printProcessList(process** process_list);
 
 void addProcess(process** process_list, cmdLine* cmd, pid_t pid){
     process *newProcess = (process *)malloc(sizeof(process));
@@ -79,27 +79,29 @@ void updateProcessList(process** process_list) {
     }
 }
 
-void deleteTerminatedProcesses(process** process_list) {
-    process *curr = *process_list;
-    process *prev = NULL;
-    process *next;
+void deleteProcess(process** process_list, process* proc) {
+    if (proc == NULL) return;
 
-    while (curr) {
-        next = curr->next;
-        if (curr->status == TERMINATED) {
-            if (prev) {
-                prev->next = curr->next;
-            } else {
-                *process_list = curr->next;
-            }
-            if (curr->cmd) {
-                curr->cmd->next = NULL;
-                freeCmdLines(curr->cmd);
-            }
-            free(curr);
-            curr = next;
+    if (*process_list == proc) {
+        *process_list = proc->next;
+    } else {
+        process* prev = *process_list;
+        while (prev->next != proc) {
+            prev = prev->next;
+        }
+        if (prev->next == proc) {
+            prev->next = proc->next;
         }
     }
+
+    if (proc->cmd) {
+        proc->cmd->next = NULL;
+        freeCmdLines(proc->cmd);
+    }
+    if (debug) {
+        fprintf(stderr, "deleteProcess: Deleting process with PID %d\n", proc->pid);
+    }
+    free(proc);
 }
 
 void printProcessList(process** process_list) {
@@ -107,15 +109,22 @@ void printProcessList(process** process_list) {
 
     printf("PID          Command      STATUS\n");
     process *curr = *process_list;
+    process *next = NULL;
+
     while (curr) {
+        next = curr->next; // Save the next pointer before potentially deleting the current process
         printf("%d        %s        %s\n", curr->pid, curr->cmd->arguments[0],
                curr->status == RUNNING ? "Running" : 
                (curr->status == SUSPENDED ? "Suspended" : "Terminated"));
-        curr = curr->next;
-    }
 
-    deleteTerminatedProcesses(process_list);
+        if (curr->status == TERMINATED) {
+            deleteProcess(process_list, curr);
+        }
+
+        curr = next; // Move to the next process
+    }
 }
+
 
 void displayPrompt() {
     char cwd[PATH_MAX];
@@ -329,7 +338,6 @@ int main(int argc, char **argv) {
         }
 
         execute(cmd);
-        freeCmdLines(cmd);
     }
     return 0;
 }
