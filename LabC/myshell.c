@@ -1,4 +1,4 @@
-#include <linux/limits.h> // added
+#include <linux/limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -11,8 +11,20 @@
 #include "LineParser.h"
 
 #define BUFFER_SIZE 2048
+#define TERMINATED -1
+#define RUNNING 1
+#define SUSPENDED 0
+
+typedef struct process
+{
+    cmdLine *cmd;         /* the parsed command line*/
+    pid_t pid;            /* the process id that is running the command*/
+    int status;           /* status of the process: RUNNING/SUSPENDED/TERMINATED */
+    struct process *next; /* next process in chain */
+} process;
 
 int debug = 0; // Global variable to enable/disable debug mode
+process *process_list = NULL; // Global process list
 
 // Forward declaration
 void displayPrompt();
@@ -22,6 +34,31 @@ void handleAlarmCommand(cmdLine *pCmdLine);
 void handleBlastCommand(cmdLine *pCmdLine);
 void executePipeCommands(cmdLine *pCmdLine); 
 void executeSingleCommand(cmdLine *pCmdLine);
+void addProcess(process** process_list, cmdLine* cmd, pid_t pid);
+void printProcessList(process** process_list);
+
+void addProcess(process** process_list, cmdLine* cmd, pid_t pid){
+    process *newProcess = (process *)malloc(sizeof(process));
+    if(newProcess == NULL){
+        fprintf(stderr, "Failed to allocate memory for new process.\n");
+    }
+    newProcess->cmd = cmd;
+    newProcess->pid = pid;
+    newProcess->status = RUNNING;
+    newProcess->next = *process_list;
+    *process_list = newProcess;   
+}
+
+void printProcessList(process** process_list) {
+    printf("PID          Command      STATUS\n");
+    process *curr = *process_list;
+    while (curr) {
+        printf("%d        %s        %s\n", curr->pid, curr->cmd->arguments[0],
+               curr->status == RUNNING ? "Running" : 
+               (curr->status == SUSPENDED ? "Suspended" : "Terminated"));
+        curr = curr->next;
+    }
+}
 
 void displayPrompt() {
     char cwd[PATH_MAX];
@@ -194,6 +231,7 @@ void executeSingleCommand(cmdLine *pCmdLine) {
         _exit(1); // Exit abnormally if execvp fails
     } else {
         // Parent process
+        addProcess(&process_list, pCmdLine, pid);
         if (debug) {
             fprintf(stderr, "PID: %d\n", pid);
             fprintf(stderr, "Executing command: %s\n", pCmdLine->arguments[0]);
