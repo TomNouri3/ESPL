@@ -1,3 +1,4 @@
+#include <linux/limits.h> // added
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -8,7 +9,6 @@
 #include <signal.h>
 #include <fcntl.h>
 #include "LineParser.h"
-#include <linux/limits.h> // added
 
 #define BUFFER_SIZE 2048
 
