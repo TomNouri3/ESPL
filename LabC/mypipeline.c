@@ -166,3 +166,21 @@ int main() {
 
     return 0;
 }
+
+// How does the following affect your program:
+
+// Comment out step 4 in your code (i.e. on the parent process:do not Close the write end of the pipe). 
+// Commenting out the line that closes the write end of the pipe in the parent process can lead to the program hanging or not behaving as expected.
+// If the parent process does not close the write end of the pipe, the second child process (tail -n 2) will keep waiting for more data to be written to the pipe because it does not receive the EOF signal.
+// As a result, tail -n 2 will not terminate, and the parent process will hang indefinitely while waiting for the child processes to terminate.
+
+// Comment out step 7 in your code.
+// Commenting out the line that closes the read end of the pipe in the parent process can lead to the program not releasing resources correctly.
+// If the read end of the pipe is not closed in the parent process, it does not significantly affect the immediate output of the program but may cause resource leaks.
+// Keeping the read end open in the parent process means that the file descriptor remains open until the parent process exits. This might not have an immediate visible effect but is considered bad practice as it can lead to subtle bugs and resource exhaustion in long-running or more complex programs.
+
+// Comment out step 4 and step 8 in your code.
+// Not Waiting for Child Processes to Terminate:
+// If the parent process does not wait for the child processes to terminate (waitpid), it may exit prematurely.
+// Exiting the parent process while child processes are still running can lead to orphaned child processes or zombie processes.
+// The child processes may not have completed their execution, which can lead to incomplete or incorrect output.
