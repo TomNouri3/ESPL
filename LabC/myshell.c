@@ -216,6 +216,19 @@ void handleBlastCommand(cmdLine *pCmdLine) {
     }
 }
 
+void handleSleepCommand(cmdLine *pCmdLine) {
+    if (pCmdLine->argCount < 2) {
+        fprintf(stderr, "sleep: missing process id\n");
+    } else {
+        int pid = atoi(pCmdLine->arguments[1]);
+        if (kill(pid, SIGTSTP) == -1) {
+            perror("sleep failed");
+        } else {
+            printf("Process %d suspended\n", pid);
+        }
+    }
+}
+
 void execute(cmdLine *pCmdLine) {
     if (strcmp(pCmdLine->arguments[0], "cd") == 0) {
         handleCdCommand(pCmdLine);
@@ -225,6 +238,9 @@ void execute(cmdLine *pCmdLine) {
         return;
     } else if (strcmp(pCmdLine->arguments[0], "blast") == 0) {
         handleBlastCommand(pCmdLine);
+        return;
+    } else if (strcmp(pCmdLine->arguments[0], "sleep") == 0) {
+        handleSleepCommand(pCmdLine);
         return;
     } else if (strcmp(pCmdLine->arguments[0], "procs") == 0) {
         printProcessList(&process_list);
@@ -375,6 +391,8 @@ int main(int argc, char **argv) {
         }
 
         execute(cmd);
+        
     }
+    freeProcessList(process_list);
     return 0;
 }
