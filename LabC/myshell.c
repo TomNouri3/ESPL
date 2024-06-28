@@ -10,6 +10,10 @@
 #include <fcntl.h>
 #include "LineParser.h"
 
+#ifndef WCONTINUED
+#define WCONTINUED 8
+#endif
+
 #define BUFFER_SIZE 2048
 #define TERMINATED -1
 #define RUNNING 1
@@ -39,6 +43,51 @@ void setProcessStatus(process *process_list, int pid, int status);
 void updateProcessList(process** process_list);
 void deleteProcess(process** process_list, process* proc);
 void printProcessList(process** process_list);
+void updateProcessStatus(process* process_list, int pid, int status);
+
+void freeProcessList(process* process_list) {
+    process* curr = process_list;
+    while (curr != NULL) {
+        process* next = curr->next;
+        freeCmdLines(curr->cmd);
+        free(curr);
+        curr = next;
+    }
+}
+
+void updateProcessList(process **process_list) {
+    int status = 0;
+    process *curr;
+    for (curr = *process_list; curr != NULL; curr = curr->next) {
+        int res = waitpid(curr->pid, &status, WCONTINUED | WNOHANG | WUNTRACED );
+        if (res == 0) {
+            updateProcessStatus(curr, curr->pid, RUNNING);
+        } else {
+            if (WIFEXITED(status) || WIFSIGNALED(status)) {
+                updateProcessStatus(curr, curr->pid, TERMINATED);
+            } 
+            else if (WIFCONTINUED(status)) {
+                updateProcessStatus(curr, curr->pid, RUNNING);
+            }
+            else if (WIFSTOPPED(status)) {
+                updateProcessStatus(curr, curr->pid, SUSPENDED);
+            } 
+        }
+    }
+}
+
+void updateProcessStatus(process* process_list, int pid, int status) {
+    while (process_list != NULL) {
+        if (process_list->pid == pid) {
+            process_list->status = status;
+            if (debug) {
+                fprintf(stderr, "updateProcessStatus: Updated PID %d to status %d\n", pid, status);
+            }
+            break;
+        }
+        process_list = process_list->next;
+    }
+}
 
 void addProcess(process** process_list, cmdLine* cmd, pid_t pid){
     process *newProcess = (process *)malloc(sizeof(process));
@@ -59,23 +108,6 @@ void setProcessStatus(process *process_list, int pid, int status) {
             break;
         }
         process_list = process_list->next;
-    }
-}
-
-void updateProcessList(process** process_list) {
-    int status = 0;
-    process *curr;
-    for (curr = *process_list; curr != NULL; curr = curr->next) {
-        int result = waitpid(curr->pid, &status, WNOHANG | WUNTRACED);
-        if (result == 0) {
-            setProcessStatus(curr, curr->pid, RUNNING);
-        } else if (WIFEXITED(status) || WIFSIGNALED(status)) {
-                setProcessStatus(curr, curr->pid, TERMINATED);
-        } else if (WIFSTOPPED(status)) {
-            setProcessStatus(curr, curr->pid, SUSPENDED);
-        } else if (WIFCONTINUED(status)) {
-            setProcessStatus(curr, curr->pid, RUNNING);
-        }
     }
 }
 
@@ -117,14 +149,19 @@ void printProcessList(process** process_list) {
                curr->status == RUNNING ? "Running" : 
                (curr->status == SUSPENDED ? "Suspended" : "Terminated"));
 
+        curr = next; // Move to the next process
+    }
+
+    // Now delete the freshly terminated processes
+    curr = *process_list;
+    while (curr != NULL) {
+        next = curr->next;
         if (curr->status == TERMINATED) {
             deleteProcess(process_list, curr);
         }
-
-        curr = next; // Move to the next process
+        curr = next;
     }
 }
-
 
 void displayPrompt() {
     char cwd[PATH_MAX];
