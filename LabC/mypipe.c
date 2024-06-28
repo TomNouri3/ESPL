@@ -2,7 +2,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-#include <sys/types.h> // added
+#include <sys/types.h> // Added
+#include <sys/wait.h> // Added
 
 #define MESSAGE "hello"
 #define BUFFER_SIZE 128
