@@ -23,9 +23,24 @@
 // If fork() returns 0, we are in the child process.
 // If fork() returns a positive number, we are in the parent process and the return value is the PID of the child.
 
-#include <unistd.h> // for pipe()
-#include <stdio.h>  // for perror()
-#include <stdlib.h> // for exit()
+// 3. In the child1 process:
+
+// Close the standard output:
+// We need to close the standard output file descriptor to redirect it to the pipe.
+// close(STDOUT_FILENO); closes the standard output file descriptor which is file descriptor 1. 
+// This prepares for redirecting standard output to the pipe.
+// In Unix-like operating systems, every process has a set of standard file descriptors that are automatically opened when the process starts:
+// Standard Input (STDIN_FILENO): File descriptor 0, used for reading input.
+// Standard Output (STDOUT_FILENO): File descriptor 1, used for writing output.
+// Standard Error (STDERR_FILENO): File descriptor 2, used for writing error messages.
+// By default, the standard output of a process writes to the terminal (or console) where the process was started.
+// In the context of our example, we want the output of the ls -l command to be written to a pipe instead of the terminal. To achieve this, we need to redirect the standard output to the pipe.
+// The standard output file descriptor is automatically used by the process for any output operations. To redirect this output to a different location (in this case, the write end of the pipe), 
+// we need to: close the current standard output file descriptor and duplicate the file descriptor for the write end of the pipe so that it takes the place of the standard output file descriptor.
+
+#include <unistd.h>   // for pipe() and fork()
+#include <stdio.h>    // for perror()
+#include <stdlib.h>   // for exit()
 #include <sys/types.h> // for pid_t
 #include <sys/wait.h> // for waitpid()
 
@@ -45,6 +60,9 @@ int main() {
     // pipefd[1] will be used by the first child process to write the output of ls -l into the pipe.
     // pipefd[0] will be used by the second child process to read the input for tail -n 2 from the pipe.
 
+    // Debug message: Before forking
+    fprintf(stderr, "(parent_process>forking…)\n");
+
     // Fork a first child process (child1).
     pid_t child1 = fork(); // Create a new process by duplicating the current process
 
@@ -54,12 +72,96 @@ int main() {
     }
 
     if (child1 == 0) { // If fork() returns 0, we are in the child process.
-        // Placeholder for child process code
-        // In the child process, we will eventually close the standard output,
-        // duplicate the write-end of the pipe using dup(), close the file descriptor that was duplicated,
-        // and execute "ls -l".
+        // Debug message: Redirecting stdout to the write end of the pipe
+        fprintf(stderr, "(child1>redirecting stdout to the write end of the pipe…)\n");
+
+        // Close the standard output.
+        close(STDOUT_FILENO);
+
+        // Duplicate the write-end of the pipe using dup2.
+        dup2(pipefd[1], STDOUT_FILENO);
+
+        // Close the file descriptor that was duplicated.
+        // After duplicating it to standard output, we no longer need the original descriptor in the child process.
+        close(pipefd[1]);
+
+        // Close the read-end file descriptor (we don't need it in the first child process)
+        close(pipefd[0]);
+
+        // Debug message: Going to execute cmd: ls -l
+        fprintf(stderr, "(child1>going to execute cmd: ls -l)\n");
+
+        // Execute "ls -l".
+        char *args[] = {"ls", "-l", NULL};
+        execvp(args[0], args); // replaces the current process image with the ls -l command.
+
+        // If execvp returns, it must have failed
+        perror("execvp failed");
+        _exit(EXIT_FAILURE); // Exit abnormally if execvp fails
     } else { // If fork() returns a positive number, we are in the parent process.
-        // Placeholder for parent process code
+        // Debug message: Created process with id
+        fprintf(stderr, "(parent_process>created process with id: %d)\n", child1);
+
+        // Debug message: Closing the write end of the pipe
+        fprintf(stderr, "(parent_process>closing the write end of the pipe…)\n");
+
+        // Close the write end of the pipe.
+        close(pipefd[1]);
+
+        // Fork a second child process (child2).
+        pid_t child2 = fork(); // Create a new process by duplicating the current process
+
+        if (child2 == -1) { // Error handling: If fork() returns -1, it means the fork failed.
+            perror("fork failed");
+            exit(EXIT_FAILURE);
+        }
+
+        if (child2 == 0) { // If fork() returns 0, we are in the second child process.
+            // Debug message: Redirecting stdin to the read end of the pipe
+            fprintf(stderr, "(child2>redirecting stdin to the read end of the pipe…)\n");
+
+            // Close the standard input.
+            close(STDIN_FILENO);
+
+            // Duplicate the read-end of the pipe using dup2.
+            dup2(pipefd[0], STDIN_FILENO);
+
+            // Close the file descriptor that was duplicated.
+            close(pipefd[0]);
+
+            // Debug message: Going to execute cmd: tail -n 2
+            fprintf(stderr, "(child2>going to execute cmd: tail -n 2)\n");
+
+            // Execute "tail -n 2".
+            char *args[] = {"tail", "-n", "2", NULL};
+            execvp(args[0], args); // replaces the current process image with the tail -n 2 command.
+
+            // If execvp returns, it must have failed
+            perror("execvp failed");
+            _exit(EXIT_FAILURE); // Exit abnormally if execvp fails
+
+        } else { // If fork() returns a positive number, we are in the parent process.
+            // Debug message: Created process with id
+            fprintf(stderr, "(parent_process>created process with id: %d)\n", child2);
+
+            // Debug message: Closing the read end of the pipe
+            fprintf(stderr, "(parent_process>closing the read end of the pipe…)\n");
+
+            // Close the read end of the pipe.
+            close(pipefd[0]);
+
+            // Debug message: Waiting for child processes to terminate
+            fprintf(stderr, "(parent_process>waiting for child processes to terminate…)\n");
+
+            // Wait for the first child process to terminate.
+            waitpid(child1, NULL, 0);
+
+            // Wait for the second child process to terminate.
+            waitpid(child2, NULL, 0);
+
+            // Debug message: Exiting
+            fprintf(stderr, "(parent_process>exiting…)\n");
+        }
     }
 
     return 0;
