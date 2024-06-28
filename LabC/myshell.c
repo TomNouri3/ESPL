@@ -36,6 +36,8 @@ void executePipeCommands(cmdLine *pCmdLine);
 void executeSingleCommand(cmdLine *pCmdLine);
 void addProcess(process** process_list, cmdLine* cmd, pid_t pid);
 void printProcessList(process** process_list);
+void updateProcessList(process** process_list);
+void deleteTerminatedProcesses(process** process_list);
 
 void addProcess(process** process_list, cmdLine* cmd, pid_t pid){
     process *newProcess = (process *)malloc(sizeof(process));
@@ -49,7 +51,50 @@ void addProcess(process** process_list, cmdLine* cmd, pid_t pid){
     *process_list = newProcess;   
 }
 
+void updateProcessList(process** process_list) {
+    int status;
+    process *curr = *process_list;
+    while (curr) {
+        pid_t result = waitpid(curr->pid, &status, WNOHANG | WUNTRACED);
+        if (result == -1) {
+            perror("waitpid failed");
+        } else if (result > 0) {
+            if (WIFEXITED(status) || WIFSIGNALED(status)) {
+                curr->status = TERMINATED;
+            } else if (WIFSTOPPED(status)) {
+                curr->status = SUSPENDED;
+            } else if (WIFCONTINUED(status)) {
+                curr->status = RUNNING;
+            }
+        }
+        curr = curr->next;
+    }
+}
+
+void deleteTerminatedProcesses(process** process_list) {
+    process *curr = *process_list;
+    process *prev = NULL;
+
+    while (curr) {
+        if (curr->status == TERMINATED) {
+            if (prev) {
+                prev->next = curr->next;
+            } else {
+                *process_list = curr->next;
+            }
+            freeCmdLines(curr->cmd);
+            free(curr);
+            curr = prev ? prev->next : *process_list;
+        } else {
+            prev = curr;
+            curr = curr->next;
+        }
+    }
+}
+
 void printProcessList(process** process_list) {
+    updateProcessList(process_list);
+
     printf("PID          Command      STATUS\n");
     process *curr = *process_list;
     while (curr) {
@@ -58,6 +103,8 @@ void printProcessList(process** process_list) {
                (curr->status == SUSPENDED ? "Suspended" : "Terminated"));
         curr = curr->next;
     }
+
+    deleteTerminatedProcesses(process_list);
 }
 
 void displayPrompt() {
@@ -122,6 +169,9 @@ void execute(cmdLine *pCmdLine) {
         return;
     } else if (strcmp(pCmdLine->arguments[0], "blast") == 0) {
         handleBlastCommand(pCmdLine);
+        return;
+    } else if (strcmp(pCmdLine->arguments[0], "procs") == 0) {
+        printProcessList(&process_list);
         return;
     }
 
