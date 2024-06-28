@@ -38,6 +38,7 @@ void addProcess(process** process_list, cmdLine* cmd, pid_t pid);
 void printProcessList(process** process_list);
 void updateProcessList(process** process_list);
 void deleteTerminatedProcesses(process** process_list);
+void setProcessStatus(process *process_list, int pid, int status);
 
 void addProcess(process** process_list, cmdLine* cmd, pid_t pid){
     process *newProcess = (process *)malloc(sizeof(process));
@@ -51,43 +52,52 @@ void addProcess(process** process_list, cmdLine* cmd, pid_t pid){
     *process_list = newProcess;   
 }
 
-void updateProcessList(process** process_list) {
-    int status;
-    process *curr = *process_list;
-    while (curr) {
-        pid_t result = waitpid(curr->pid, &status, WNOHANG | WUNTRACED);
-        if (result == -1) {
-            perror("waitpid failed");
-        } else if (result > 0) {
-            if (WIFEXITED(status) || WIFSIGNALED(status)) {
-                curr->status = TERMINATED;
-            } else if (WIFSTOPPED(status)) {
-                curr->status = SUSPENDED;
-            } else if (WIFCONTINUED(status)) {
-                curr->status = RUNNING;
-            }
+void setProcessStatus(process *process_list, int pid, int status) {
+    while (process_list != NULL) {
+        if (process_list->pid == pid) {
+            process_list->status = status;
+            break;
         }
-        curr = curr->next;
+        process_list = process_list->next;
+    }
+}
+
+void updateProcessList(process** process_list) {
+    int status = 0;
+    process *curr;
+    for (curr = *process_list; curr != NULL; curr = curr->next) {
+        int result = waitpid(curr->pid, &status, WNOHANG | WUNTRACED);
+        if (result == 0) {
+            setProcessStatus(curr, curr->pid, RUNNING);
+        } else if (WIFEXITED(status) || WIFSIGNALED(status)) {
+                setProcessStatus(curr, curr->pid, TERMINATED);
+        } else if (WIFSTOPPED(status)) {
+            setProcessStatus(curr, curr->pid, SUSPENDED);
+        } else if (WIFCONTINUED(status)) {
+            setProcessStatus(curr, curr->pid, RUNNING);
+        }
     }
 }
 
 void deleteTerminatedProcesses(process** process_list) {
     process *curr = *process_list;
     process *prev = NULL;
+    process *next;
 
     while (curr) {
+        next = curr->next;
         if (curr->status == TERMINATED) {
             if (prev) {
                 prev->next = curr->next;
             } else {
                 *process_list = curr->next;
             }
-            freeCmdLines(curr->cmd);
+            if (curr->cmd) {
+                curr->cmd->next = NULL;
+                freeCmdLines(curr->cmd);
+            }
             free(curr);
-            curr = prev ? prev->next : *process_list;
-        } else {
-            prev = curr;
-            curr = curr->next;
+            curr = next;
         }
     }
 }
