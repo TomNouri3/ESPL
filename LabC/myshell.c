@@ -14,6 +14,15 @@
 
 int debug = 0; // Global variable to enable/disable debug mode
 
+// Forward declaration
+void displayPrompt();
+char* readInput();
+void handleCdCommand(cmdLine *pCmdLine);
+void handleAlarmCommand(cmdLine *pCmdLine);
+void handleBlastCommand(cmdLine *pCmdLine);
+void executePipeCommands(cmdLine *pCmdLine); 
+void executeSingleCommand(cmdLine *pCmdLine);
+
 void displayPrompt() {
     char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
@@ -79,6 +88,69 @@ void execute(cmdLine *pCmdLine) {
         return;
     }
 
+    if (pCmdLine->next) {
+        executePipeCommands(pCmdLine);
+    } else {
+        executeSingleCommand(pCmdLine);
+    }
+}
+
+void executePipeCommands(cmdLine *pCmdLine) {
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        perror("pipe failed");
+        exit(1);
+    }
+
+    pid_t pid1 = fork();
+    if (pid1 == -1) {
+        perror("fork failed");
+        exit(1);
+    } else if (pid1 == 0) {
+        // First child process
+        close(STDOUT_FILENO);
+        dup2(pipefd[1], STDOUT_FILENO);
+        close(pipefd[1]);
+        close(pipefd[0]);
+
+        if (pCmdLine->outputRedirect) {
+            fprintf(stderr, "Output redirection on the left-hand side of the pipe is not allowed\n");
+            _exit(1);
+        }
+
+        execvp(pCmdLine->arguments[0], pCmdLine->arguments);
+        perror("execvp failed");
+        _exit(1);
+    }
+
+    pid_t pid2 = fork();
+    if (pid2 == -1) {
+        perror("fork failed");
+        exit(1);
+    } else if (pid2 == 0) {
+        // Second child process
+        close(STDIN_FILENO);
+        dup2(pipefd[0], STDIN_FILENO);
+        close(pipefd[0]);
+        close(pipefd[1]);
+
+        if (pCmdLine->next->inputRedirect) {
+            fprintf(stderr, "Input redirection on the right-hand side of the pipe is not allowed\n");
+            _exit(1);
+        }
+
+        execvp(pCmdLine->next->arguments[0], pCmdLine->next->arguments);
+        perror("execvp failed");
+        _exit(1);
+    }
+
+    close(pipefd[0]);
+    close(pipefd[1]);
+    waitpid(pid1, NULL, 0);
+    waitpid(pid2, NULL, 0);
+}
+
+void executeSingleCommand(cmdLine *pCmdLine) {
     pid_t pid = fork();
     
     if (pid == -1) {
@@ -134,6 +206,7 @@ void execute(cmdLine *pCmdLine) {
 }
 
 int main(int argc, char **argv) {
+    
     // Check for debug flag
     if (argc > 1 && strcmp(argv[1], "-d") == 0) {
         debug = 1;
