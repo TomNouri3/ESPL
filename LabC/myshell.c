@@ -9,6 +9,7 @@
 #include <signal.h>
 #include <fcntl.h>
 #include "LineParser.h"
+#include <ctype.h> 
 
 #ifndef WCONTINUED
 #define WCONTINUED 8
@@ -18,6 +19,14 @@
 #define TERMINATED -1
 #define RUNNING 1
 #define SUSPENDED 0
+#define HISTLEN 20
+#define MAX_BUF 200
+
+char history[HISTLEN][MAX_BUF];
+int history_count = 0;
+int history_start = 0;
+int history_end = 0;
+
 
 typedef struct process
 {
@@ -44,6 +53,36 @@ void updateProcessList(process** process_list);
 void deleteProcess(process** process_list, process* proc);
 void printProcessList(process** process_list);
 void updateProcessStatus(process* process_list, int pid, int status);
+
+void addToHistory(const char *cmd) {
+    strncpy(history[history_end], cmd, MAX_BUF - 1);
+    history[history_end][MAX_BUF - 1] = '\0'; // Ensure null-terminated
+    history_end = (history_end + 1) % HISTLEN;
+    if (history_count < HISTLEN) {
+        history_count++;
+    } else {
+        history_start = (history_start + 1) % HISTLEN;
+    }
+}
+
+void printHistory() {
+    for (int i = 0; i < history_count; i++) {
+        int index = (history_start + i) % HISTLEN;
+        printf("%d %s", i + 1, history[index]);
+    }
+}
+
+
+char* getHistoryCommand(int index) {
+    if (index < 1 || index > history_count) {
+        printf("No such command in history.\n");
+        return NULL;
+    }
+    int hist_index = (history_start + index - 1) % HISTLEN;
+    return history[hist_index];
+}
+
+
 
 void freeProcessList(process* process_list) {
     process* curr = process_list;
@@ -239,13 +278,15 @@ void execute(cmdLine *pCmdLine) {
     } else if (strcmp(pCmdLine->arguments[0], "blast") == 0) {
         handleBlastCommand(pCmdLine);
         return;
-    } else if (strcmp(pCmdLine->arguments[0], "sleep") == 0) {
-        handleSleepCommand(pCmdLine);
-        return;
     } else if (strcmp(pCmdLine->arguments[0], "procs") == 0) {
         printProcessList(&process_list);
         return;
-    }
+    } else if (strcmp(pCmdLine->arguments[0], "sleep") == 0) {
+        handleSleepCommand(pCmdLine);
+    } else if (strcmp(pCmdLine->arguments[0], "history") == 0) {
+        printHistory();
+        return;
+    } 
 
     if (pCmdLine->next) {
         executePipeCommands(pCmdLine);
@@ -380,6 +421,31 @@ int main(int argc, char **argv) {
             break;
         }
 
+        // Handle "!!" command
+        if (strcmp(input, "!!\n") == 0) {
+            const char *last_cmd = getHistoryCommand(history_count);
+            if (last_cmd != NULL) {
+                strcpy(input, last_cmd);
+                printf("Executing: %s\n", input);
+            } else {
+                printf("No commands in history.\n");
+                continue;
+            }
+        } 
+        // Handle "!n" command
+        else if (input[0] == '!' && isdigit(input[1])) {
+            int index = atoi(&input[1]);
+            const char *cmd = getHistoryCommand(index);
+            if (cmd != NULL) {
+                strcpy(input, cmd);
+                printf("Executing: %s\n", input);
+            } else {
+                printf("No such command in history.\n");
+                continue;
+            }
+        }
+         addToHistory(input);
+
         cmdLine *cmd = parseCmdLines(input);
         if (cmd == NULL) {
             continue;
@@ -391,7 +457,6 @@ int main(int argc, char **argv) {
         }
 
         execute(cmd);
-        
     }
     freeProcessList(process_list);
     return 0;
