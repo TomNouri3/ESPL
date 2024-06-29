@@ -38,9 +38,6 @@ typedef struct process
 
 process *process_list = NULL; // Global process list
 
-
-
-
 void addToHistory(const char *cmd) {
     strncpy(history[history_end], cmd, MAX_BUF - 1); // copies the command line cmd to the position history[history_end] in the history buffer (MAX_BUF - 1 ensures that at most MAX_BUF - 1 characters are copied, leaving room for the null terminator)
     history[history_end][MAX_BUF - 1] = '\0'; // explicitly adds a null terminator to ensure the string is properly terminated
