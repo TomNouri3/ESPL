@@ -26,7 +26,8 @@ char history[HISTLEN][MAX_BUF];
 int history_count = 0;
 int history_start = 0;
 int history_end = 0;
-
+int debug = 0; // Global variable to enable/disable debug mode
+process *process_list = NULL; // Global process list
 
 typedef struct process
 {
@@ -36,27 +37,10 @@ typedef struct process
     struct process *next; /* next process in chain */
 } process;
 
-int debug = 0; // Global variable to enable/disable debug mode
-process *process_list = NULL; // Global process list
-
-// Forward declaration
-void displayPrompt();
-char* readInput();
-void handleCdCommand(cmdLine *pCmdLine);
-void handleAlarmCommand(cmdLine *pCmdLine);
-void handleBlastCommand(cmdLine *pCmdLine);
-void executePipeCommands(cmdLine *pCmdLine); 
-void executeSingleCommand(cmdLine *pCmdLine);
-void addProcess(process** process_list, cmdLine* cmd, pid_t pid);
-void setProcessStatus(process *process_list, int pid, int status);
-void updateProcessList(process** process_list);
-void deleteProcess(process** process_list, process* proc);
-void printProcessList(process** process_list);
-void updateProcessStatus(process* process_list, int pid, int status);
 
 void addToHistory(const char *cmd) {
-    strncpy(history[history_end], cmd, MAX_BUF - 1);
-    history[history_end][MAX_BUF - 1] = '\0'; // Ensure null-terminated
+    strncpy(history[history_end], cmd, MAX_BUF - 1); // copies the command line cmd to the position history[history_end] in the history buffer (MAX_BUF - 1 ensures that at most MAX_BUF - 1 characters are copied, leaving room for the null terminator)
+    history[history_end][MAX_BUF - 1] = '\0'; // explicitly adds a null terminator to ensure the string is properly terminated
     history_end = (history_end + 1) % HISTLEN;
     if (history_count < HISTLEN) {
         history_count++;
@@ -72,7 +56,6 @@ void printHistory() {
     }
 }
 
-
 char* getHistoryCommand(int index) {
     if (index < 1 || index > history_count) {
         printf("No such command in history.\n");
@@ -82,8 +65,6 @@ char* getHistoryCommand(int index) {
     return history[hist_index];
 }
 
-
-
 void freeProcessList(process* process_list) {
     process* curr = process_list;
     while (curr != NULL) {
@@ -91,27 +72,6 @@ void freeProcessList(process* process_list) {
         freeCmdLines(curr->cmd);
         free(curr);
         curr = next;
-    }
-}
-
-void updateProcessList(process **process_list) {
-    int status = 0;
-    process *curr;
-    for (curr = *process_list; curr != NULL; curr = curr->next) {
-        int res = waitpid(curr->pid, &status, WCONTINUED | WNOHANG | WUNTRACED );
-        if (res == 0) {
-            updateProcessStatus(curr, curr->pid, RUNNING);
-        } else {
-            if (WIFEXITED(status) || WIFSIGNALED(status)) {
-                updateProcessStatus(curr, curr->pid, TERMINATED);
-            } 
-            else if (WIFCONTINUED(status)) {
-                updateProcessStatus(curr, curr->pid, RUNNING);
-            }
-            else if (WIFSTOPPED(status)) {
-                updateProcessStatus(curr, curr->pid, SUSPENDED);
-            } 
-        }
     }
 }
 
@@ -128,6 +88,38 @@ void updateProcessStatus(process* process_list, int pid, int status) {
     }
 }
 
+void updateProcessList(process **process_list) {
+    int status = 0;
+    process *curr;
+    for (curr = *process_list; curr != NULL; curr = curr->next) {
+        int res = waitpid(curr->pid, &status, WCONTINUED | WNOHANG | WUNTRACED );
+        // Call waitpid for Each Process
+        // waitpid is called with the following flags:
+        // WCONTINUED: Report if a stopped process has been continued
+        // WNOHANG: Return immediately if no child has exited
+        // WUNTRACED: Report the status of stopped children
+        // waitpid checks the status of the process with the process ID curr->pid and stores the status in the status variable
+        // res is set to the PID of the child whose status is reported, 0 if no status is available, or -1 on error
+        if (res == 0) {
+            updateProcessStatus(curr, curr->pid, RUNNING);
+        } else {
+            if (WIFEXITED(status) || WIFSIGNALED(status)) {
+                // WIFEXITED(status): Returns true if the child terminated normally
+                // WIFSIGNALED(status): Returns true if the child process was terminated by a signal.
+                updateProcessStatus(curr, curr->pid, TERMINATED);
+            } 
+            else if (WIFCONTINUED(status)) {
+                // WIFCONTINUED(status): Returns true if the child process has continued from a job control stop.
+                updateProcessStatus(curr, curr->pid, RUNNING);
+            }
+            else if (WIFSTOPPED(status)) {
+                // WIFSTOPPED(status): Returns true if the child process was stopped by delivery of a signal.
+                updateProcessStatus(curr, curr->pid, SUSPENDED);
+            } 
+        }
+    }
+}
+
 void addProcess(process** process_list, cmdLine* cmd, pid_t pid){
     process *newProcess = (process *)malloc(sizeof(process));
     if(newProcess == NULL){
@@ -140,22 +132,16 @@ void addProcess(process** process_list, cmdLine* cmd, pid_t pid){
     *process_list = newProcess;   
 }
 
-void setProcessStatus(process *process_list, int pid, int status) {
-    while (process_list != NULL) {
-        if (process_list->pid == pid) {
-            process_list->status = status;
-            break;
-        }
-        process_list = process_list->next;
-    }
-}
-
 void deleteProcess(process** process_list, process* proc) {
     if (proc == NULL) return;
 
     if (*process_list == proc) {
-        *process_list = proc->next;
+        // If the process to be deleted (proc) is the head of the list (*process_list), the head of the list is updated to the next process in the list (proc->next).
+        *process_list = proc->next; 
     } else {
+        // A pointer prev is initialized to point to the head of the list.
+        // A loop is used to traverse the list until prev->next is equal to proc
+        // Once the process to be deleted is found, prev->next is updated to proc->next, effectively removing proc from the list.
         process* prev = *process_list;
         while (prev->next != proc) {
             prev = prev->next;
@@ -426,7 +412,7 @@ int main(int argc, char **argv) {
             const char *last_cmd = getHistoryCommand(history_count);
             if (last_cmd != NULL) {
                 strcpy(input, last_cmd);
-                printf("Executing: %s\n", input);
+                printf("Executing: %s", input);
             } else {
                 printf("No commands in history.\n");
                 continue;
@@ -438,7 +424,7 @@ int main(int argc, char **argv) {
             const char *cmd = getHistoryCommand(index);
             if (cmd != NULL) {
                 strcpy(input, cmd);
-                printf("Executing: %s\n", input);
+                printf("Executing: %s", input);
             } else {
                 printf("No such command in history.\n");
                 continue;
@@ -461,5 +447,3 @@ int main(int argc, char **argv) {
     freeProcessList(process_list);
     return 0;
 }
-
-// done
