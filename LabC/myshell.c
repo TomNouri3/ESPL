@@ -248,8 +248,9 @@ void handleSleepCommand(cmdLine *pCmdLine) {
     if (pCmdLine->argCount < 2) {
         fprintf(stderr, "sleep: missing process id\n");
     } else {
-        int pid = atoi(pCmdLine->arguments[1]);
+        int pid = atoi(pCmdLine->arguments[1]);    
         if (kill(pid, SIGTSTP) == -1) {
+            fprintf(stderr, "sleep failed\n");
             perror("sleep failed");
         } else {
             printf("Process %d suspended\n", pid);
@@ -383,6 +384,7 @@ void execute(cmdLine *pCmdLine) {
         return;
     } else if (strcmp(pCmdLine->arguments[0], "sleep") == 0) {
         handleSleepCommand(pCmdLine);
+        return;
     } else if (strcmp(pCmdLine->arguments[0], "history") == 0) {
         printHistory();
         return;
