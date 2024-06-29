@@ -27,7 +27,6 @@ int history_count = 0;
 int history_start = 0;
 int history_end = 0;
 int debug = 0; // Global variable to enable/disable debug mode
-process *process_list = NULL; // Global process list
 
 typedef struct process
 {
@@ -36,6 +35,10 @@ typedef struct process
     int status;           /* status of the process: RUNNING/SUSPENDED/TERMINATED */
     struct process *next; /* next process in chain */
 } process;
+
+process *process_list = NULL; // Global process list
+
+
 
 
 void addToHistory(const char *cmd) {
@@ -254,33 +257,6 @@ void handleSleepCommand(cmdLine *pCmdLine) {
     }
 }
 
-void execute(cmdLine *pCmdLine) {
-    if (strcmp(pCmdLine->arguments[0], "cd") == 0) {
-        handleCdCommand(pCmdLine);
-        return;
-    } else if (strcmp(pCmdLine->arguments[0], "alarm") == 0) {
-        handleAlarmCommand(pCmdLine);
-        return;
-    } else if (strcmp(pCmdLine->arguments[0], "blast") == 0) {
-        handleBlastCommand(pCmdLine);
-        return;
-    } else if (strcmp(pCmdLine->arguments[0], "procs") == 0) {
-        printProcessList(&process_list);
-        return;
-    } else if (strcmp(pCmdLine->arguments[0], "sleep") == 0) {
-        handleSleepCommand(pCmdLine);
-    } else if (strcmp(pCmdLine->arguments[0], "history") == 0) {
-        printHistory();
-        return;
-    } 
-
-    if (pCmdLine->next) {
-        executePipeCommands(pCmdLine);
-    } else {
-        executeSingleCommand(pCmdLine);
-    }
-}
-
 void executePipeCommands(cmdLine *pCmdLine) {
     int pipefd[2];
     if (pipe(pipefd) == -1) {
@@ -389,6 +365,33 @@ void executeSingleCommand(cmdLine *pCmdLine) {
         if (pCmdLine->blocking) {
             waitpid(pid, NULL, 0); // Wait for the child process to terminate if blocking
         }
+    }
+}
+
+void execute(cmdLine *pCmdLine) {
+    if (strcmp(pCmdLine->arguments[0], "cd") == 0) {
+        handleCdCommand(pCmdLine);
+        return;
+    } else if (strcmp(pCmdLine->arguments[0], "alarm") == 0) {
+        handleAlarmCommand(pCmdLine);
+        return;
+    } else if (strcmp(pCmdLine->arguments[0], "blast") == 0) {
+        handleBlastCommand(pCmdLine);
+        return;
+    } else if (strcmp(pCmdLine->arguments[0], "procs") == 0) {
+        printProcessList(&process_list);
+        return;
+    } else if (strcmp(pCmdLine->arguments[0], "sleep") == 0) {
+        handleSleepCommand(pCmdLine);
+    } else if (strcmp(pCmdLine->arguments[0], "history") == 0) {
+        printHistory();
+        return;
+    } 
+
+    if (pCmdLine->next) {
+        executePipeCommands(pCmdLine);
+    } else {
+        executeSingleCommand(pCmdLine);
     }
 }
 
