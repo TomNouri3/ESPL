@@ -43,4 +43,3 @@ loop1:                          ; Push evry char* of argv for _start
 	pop	ebp		; Restore caller state
 	ret                     ; Back to caller
 startup_end
-
