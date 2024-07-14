@@ -2,25 +2,42 @@
 Why the Linking Script is Needed
 
 Address Space Clashes:
-Problem: Without a custom linking script, the loader and the loaded program might be mapped to the same default virtual memory addresses, typically starting at 0x08048000. This would lead to a collision between the loader and the loaded executable, causing undefined behavior or crashes.
-Solution: The linking script specifies a different starting address (0x04048000) for the loader, ensuring there is no overlap between the loader and the executable it loads. This prevents memory space clashes by allocating the loader at a lower address.
+Problem: Without a custom linking script, 
+the loader and the loaded program might be mapped to the same default virtual memory addresses, 
+typically starting at 0x08048000. 
+This would lead to a collision between the loader and the loaded executable, causing undefined behavior or crashes.
+Solution: The linking script specifies a different starting address (0x04048000) for the loader, 
+ensuring there is no overlap between the loader and the executable it loads. 
+This prevents memory space clashes by allocating the loader at a lower address.
 
 How You Verified That It Worked
 
-Explanation: Compiling the loader with the custom linking script to ensure it is mapped to the specified lower address. The -T linking_script option tells the linker to use our custom script.
+Explanation: Compiling the loader with the custom linking script to ensure it is mapped to the specified lower address. 
+The -T linking_script option tells the linker to use our custom script.
 Check the ELF Header: readelf -h loader
 ELF Header:
   Entry point address:               0x4048920
   ...
-The Entry point address should reflect the address specified in the linking script. In this case, 0x4048920 confirms that the loader is placed at the intended address range.
+The Entry point address should reflect the address specified in the linking script. 
+In this case, 0x4048920 confirms that the loader is placed at the intended address range.
 
 Check Program Headers:
 readelf -l loader
-Explanation: This command verifies the program headers and ensures that the segments are correctly mapped to the addresses specified in the linking script.
+Explanation: This command verifies the program headers and ensures that the segments 
+are correctly mapped to the addresses specified in the linking script.
 
 ./loader hello
-Explanation: Running the loader with a static ELF executable (hello) demonstrates that the loader can correctly map the executable segments into memory. The printed information confirms that the memory mapping follows the expected layout without any address clashes.
+Explanation: Running the loader with a static ELF executable (hello) demonstrates 
+that the loader can correctly map the executable segments into memory. 
+The printed information confirms that the memory mapping follows the expected layout without any address clashes.
 
+The Loader Program: This is the program that reads, maps, and executes another executable file.
+The Loaded Executable: This is the executable file that is being loaded and executed by the loader.
+Both the loader and the loaded executable will occupy regions of the process’s address space. I
+f these regions overlap, it can lead to serious issues
+
+A linking script is used to precisely control the memory layout of the executable being created 
+(the loader in this case). It specifies where in memory different sections of the loader should be placed. 
 */
 
 #include <stdio.h>
@@ -50,7 +67,9 @@ void load_phdr(Elf32_Phdr *phdr, int fd) {
     }
 
     // Align the virtual address and file offset to page boundaries
-    // The ELF specification requires that loadable segments' virtual addresses and file offsets be aligned to page boundaries. This ensures efficient memory access and compatibility with the operating system's memory management.
+    // The ELF specification requires that loadable segments' virtual addresses 
+    // and file offsets be aligned to page boundaries. 
+    // This ensures efficient memory access and compatibility with the operating system's memory management.
     void *aligned_addr = (void *)(phdr->p_vaddr & ~(PAGE_SIZE - 1));
     off_t aligned_offset = phdr->p_offset & ~(PAGE_SIZE - 1);
     size_t offset_diff = phdr->p_vaddr & (PAGE_SIZE - 1);
@@ -116,6 +135,10 @@ int main(int argc, char **argv) {
     close(fd);
 
     startup(argc - 1, &argv[1], entry_point);
+    //Parameters:
+    // argc: The number of command-line arguments passed to the loaded program.
+    // argv: An array of command-line arguments passed to the loaded program.
+    // start: A pointer to the entry point of the loaded program (obtained from the ELF header).
 
     if (munmap(map_start, size) == -1) {
         perror("munmap");
@@ -194,3 +217,17 @@ int is_static_executable(void *map_start) {
     }
     return 1;
 }
+
+/*
+The loader maps the ELF file into memory and processes its headers to extract necessary information.
+The loader iterates over the program headers and maps each loadable segment into memory using mmap.
+After successfully mapping the segments, the loader calls the startup function, passing the appropriate arguments 
+and the entry point of the loaded program.
+
+The startup function is a crucial part of the process of loading and executing an ELF executable. 
+It serves as the entry point for transferring control from the loader to the loaded program
+After the loader maps all necessary segments of the ELF executable into memory,
+the startup function facilitates the transition from the loader's execution context to that of the loaded executable.
+It sets up the required environment for the loaded program to start execution, 
+including setting up the stack and initializing registers as needed
+*/

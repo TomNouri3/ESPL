@@ -4,6 +4,7 @@
         "unistd.h": "c",
         "limits.h": "c",
         "string.h": "c",
-        "mman.h": "c"
+        "mman.h": "c",
+        "stdio.h": "c"
     }
 }

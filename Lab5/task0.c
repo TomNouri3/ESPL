@@ -39,7 +39,7 @@ int get_protection_flags(Elf32_Word p_flags) {
 // This function prints detailed information about an ELF program header and the corresponding memory mapping flags.
 // Input Parameters: 
 // Elf32_Phdr *phdr: A pointer to the program header structure.
-// int index: The index of the program header, though it's not used in the function.
+// int index:
 void print_phdr_info(Elf32_Phdr *phdr, int index) {
     const char *type = segment_type(phdr->p_type); // Converts the segment type (an integer) into a human-readable string.
     int prot_flags = get_protection_flags(phdr->p_flags); // Converts the ELF segment flags into mmap protection flags.
@@ -71,8 +71,8 @@ void print_phdr_info(Elf32_Phdr *phdr, int index) {
 
 // This function iterates over each program header in an ELF file and applies a given function (func) to each header.
 // Input Parameters:
-// void *map_start: A pointer to the start of the mapped ELF file in memory. (map_start: The address in virtual memory the executable is mapped to.)
-// A function pointer to the function that will be applied to each program header. This function takes two arguments: a pointer to the program header (Elf32_Phdr *) and an integer index (int). (func: the function which will be applied to each Phdr.)
+// map_start: The address in virtual memory the executable is mapped to.)
+// func: the function which will be applied to each Phdr.
 // int arg: An additional argument that can be passed to func
 int foreach_phdr(void *map_start, void (*func)(Elf32_Phdr *, int), int arg) {
     Elf32_Ehdr *ehdr = (Elf32_Ehdr *)map_start; // Casts the map_start pointer to an Elf32_Ehdr pointer to access the ELF header.
@@ -99,6 +99,8 @@ int is_static_executable(void *map_start) {
     return 1; // Static executable
 }
 
+//------------------------------------------------------------------------------------------------------------------------
+
 int main(int argc, char **argv) {
     if (argc != 2) { // Ensures that the program receives exactly one argument, which is the ELF executable filename.
         fprintf(stderr, "Usage: %s <executable>\n", argv[0]);
@@ -119,9 +121,12 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    void *map_start = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0); // Maps the entire file into the process's memory using mmap.
+    // map_start: The address in virtual memory the executable is mapped to.
+    void *map_start = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0); 
+    // Maps the entire file into the process's memory using mmap.
     // mmap: A system call that maps files or devices into memory.
-    // This statement maps the entire file into the process's memory, allowing the file to be accessed as if it were in memory.
+    // This statement maps the entire file into the process's memory, 
+    // allowing the file to be accessed as if it were in memory.
     // On success, mmap returns a pointer to the mapped area.
     if (map_start == MAP_FAILED) {
         perror("mmap");
@@ -141,6 +146,9 @@ int main(int argc, char **argv) {
     printf("Type     Offset   VirtAddr   PhysAddr   FileSiz MemSiz  Flg Align    Prot  Map\n");
 
     // Iterate over program headers and print their information
+    // map_start: The address in virtual memory the executable is mapped to.
+    // arg: an additional argument to be passed to func, for later use (not used in this task).
+    // func: the function which will be applied to each Phdr.
     foreach_phdr(map_start, print_phdr_info, 0);
 
     if (munmap(map_start, size) == -1) {
@@ -162,4 +170,10 @@ Flg: Flags indicating permissions (R = Read, W = Write, E = Execute).
 Align: Alignment requirement for the segment.
 Prot: Protection flags for mmap (R = Read, W = Write, E = Execute).
 Map: Mapping flags for mmap (FIXED PRIVATE).
+*/
+
+/*
+A static loader is a program that loads and executes a statically linked executable file. 
+Statically linked executables contain all the code they need within the executable itself, 
+as opposed to dynamically linked executables, which rely on external libraries that are loaded at runtime.
 */
